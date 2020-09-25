@@ -1,8 +1,16 @@
 package xyz.justsoft.video_thumbnail;
 
+import android.graphics.Bitmap.CompressFormat;
+import java.io.FileNotFoundException;
+
+import android.media.MediaCodec;
+import android.view.Surface;
+import android.media.MediaCodec.BufferInfo;
+import android.media.MediaFormat;
+import android.media.MediaExtractor;
+
 import android.content.ContentResolver;
 import android.graphics.Bitmap;
-import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
@@ -19,7 +27,6 @@ import android.util.Log;
 import java.io.FileInputStream;
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.io.FileNotFoundException;
 import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.util.Map;
