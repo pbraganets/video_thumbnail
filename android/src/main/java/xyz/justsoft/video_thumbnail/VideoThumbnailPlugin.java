@@ -871,7 +871,11 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
         mFrameCapture.setDataSource(path);
         mFrameCapture.setTargetSize(snapshot_width, snapshot_height);
         mFrameCapture.init();
-        return mFrameCapture.getFrameAtTime(time);
+        Bitmap bitmap = mFrameCapture.getFrameAtTime(time);
+        if (mFrameCapture != null) {
+            mFrameCapture.release();
+        }
+        return bitmap;
     }
 
     /**
