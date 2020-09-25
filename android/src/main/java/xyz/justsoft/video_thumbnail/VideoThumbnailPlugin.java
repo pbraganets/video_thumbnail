@@ -17,14 +17,12 @@ import android.opengl.*;
 import java.nio.FloatBuffer;
 import android.annotation.SuppressLint;
 import java.nio.ByteOrder;
-import android.opengl.Matrix;
 import android.graphics.SurfaceTexture.OnFrameAvailableListener;
 
 import android.content.ContentResolver;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
-import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.media.ExifInterface;
 import android.media.MediaMetadataRetriever;
