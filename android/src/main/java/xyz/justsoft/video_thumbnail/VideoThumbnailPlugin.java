@@ -208,9 +208,9 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
             if (targetH != 0 || targetW != 0) {
                 if (android.os.Build.VERSION.SDK_INT >= 27 && targetH != 0 && targetW != 0) {
                     // API Level 27
-                    bitmap = retriever.getScaledFrameAtTime(timeMs * 1000, OPTION_CLOSEST_SYNC, targetW, targetH);
+                    bitmap = retriever.getScaledFrameAtTime(timeMs * 1000, 2, targetW, targetH);
                 } else {
-                    bitmap = retriever.getFrameAtTime(timeMs * 1000, OPTION_CLOSEST_SYNC);
+                    bitmap = retriever.getFrameAtTime(timeMs * 1000, 2);
                     if (bitmap != null) {
                         int width = bitmap.getWidth();
                         int height = bitmap.getHeight();
@@ -225,7 +225,7 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
                     }
                 }
             } else {
-                bitmap = retriever.getFrameAtTime(timeMs * 1000, OPTION_CLOSEST_SYNC);
+                bitmap = retriever.getFrameAtTime(timeMs * 1000, 2);
             }
         } catch (IllegalArgumentException ex) {
             ex.printStackTrace();
