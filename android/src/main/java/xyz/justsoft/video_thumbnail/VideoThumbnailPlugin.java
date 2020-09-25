@@ -31,6 +31,26 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
+public class AV_BitmapUtil {
+    public static void saveBitmap(Bitmap bmp, String path) {
+        try {
+            FileOutputStream fos = new FileOutputStream(path);
+            bmp.compress(CompressFormat.JPEG, 100, fos);
+            fos.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static Bitmap flip(Bitmap src) {
+        Matrix matrix = new Matrix();
+        matrix.preScale(1.0f, -1.0f);
+        return Bitmap.createBitmap(src, 0, 0, src.getWidth(), src.getHeight(), matrix, true);
+    }
+}
+
 /**
  * VideoThumbnailPlugin
  */
