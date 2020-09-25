@@ -865,6 +865,14 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
     private static void runOnUiThread(Runnable runnable) {
         new Handler(Looper.getMainLooper()).post(runnable);
     }
+    
+    public static Bitmap getFrameAtTimeByFrameCapture(String path, long time, int snapshot_width, int snapshot_height) {
+        mFrameCapture = new AV_FrameCapture();
+        mFrameCapture.setDataSource(path);
+        mFrameCapture.setTargetSize(snapshot_width, snapshot_height);
+        mFrameCapture.init();
+        return mFrameCapture.getFrameAtTime(time);
+    }
 
     /**
      * Create a video thumbnail for a video. May return null if the video is corrupt
@@ -878,18 +886,23 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
         Bitmap bitmap = null;
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
+            String path = "";
             if (video.startsWith("/")) {
                 retriever.setDataSource(video);
+                path = video;
             } else if (video.startsWith("file://")) {
                 retriever.setDataSource(video.substring(7));
+                path = video.substring(7);
             } else {
                 retriever.setDataSource(video, new HashMap<String, String>());
+                path = video;
             }
 
             if (targetH != 0 || targetW != 0) {
                 if (android.os.Build.VERSION.SDK_INT >= 27 && targetH != 0 && targetW != 0) {
                     // API Level 27
-                    bitmap = retriever.getScaledFrameAtTime(timeMs * 1000, 2, targetW, targetH);
+                    //bitmap = retriever.getScaledFrameAtTime(timeMs * 1000, 2, targetW, targetH);
+                    bitmap = getFrameAtTimeByFrameCapture(path, timeMs * 1000, targetW, targetH);
                 } else {
                     bitmap = retriever.getFrameAtTime(timeMs * 1000, 2);
                     if (bitmap != null) {
