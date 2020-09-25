@@ -10,6 +10,9 @@ import android.media.MediaFormat;
 import android.media.MediaExtractor;
 import java.nio.ByteBuffer;
 
+import android.os.HandlerThread;
+import android.graphics.SurfaceTexture;
+
 import android.content.ContentResolver;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -40,6 +43,357 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
+
+class AV_GLHelper {
+
+    private static final int EGL_RECORDABLE_ANDROID = 0x3142;
+    private static final int EGL_OPENGL_ES2_BIT = 4;
+
+    private SurfaceTexture mSurfaceTexture;
+    private AV_TextureRender mTextureRender;
+
+    private EGLDisplay mEglDisplay = EGL14.EGL_NO_DISPLAY;
+    private EGLContext mEglContext = EGL14.EGL_NO_CONTEXT;
+    private EGLSurface mEglSurface = EGL14.EGL_NO_SURFACE;
+
+    public void init(SurfaceTexture st) {
+        mSurfaceTexture = st;
+        initGL();
+
+        makeCurrent();
+        mTextureRender = new AV_TextureRender();
+    }
+
+    private void initGL() {
+        mEglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
+        if (mEglDisplay == EGL14.EGL_NO_DISPLAY) {
+            throw new RuntimeException("eglGetdisplay failed : " +
+                    GLUtils.getEGLErrorString(EGL14.eglGetError()));
+        }
+
+        int[] version = new int[2];
+        if (!EGL14.eglInitialize(mEglDisplay, version, 0, version, 1)) {
+            mEglDisplay = null;
+            throw new RuntimeException("unable to initialize EGL14");
+        }
+
+        // Configure EGL for pbuffer and OpenGL ES 2.0.  We want enough RGB bits
+        // to be able to tell if the frame is reasonable.
+        int[] attribList = {
+                EGL14.EGL_RED_SIZE, 8,
+                EGL14.EGL_GREEN_SIZE, 8,
+                EGL14.EGL_BLUE_SIZE, 8,
+                EGL14.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL_RECORDABLE_ANDROID, 1,
+                EGL14.EGL_NONE
+        };
+
+        EGLConfig[] configs = new EGLConfig[1];
+        int[] numConfigs = new int[1];
+        if (!EGL14.eglChooseConfig(mEglDisplay, attribList, 0, configs, 0, configs.length,
+                numConfigs, 0)) {
+            throw new RuntimeException("unable to find RGB888+recordable ES2 EGL config");
+        }
+
+        // Configure context for OpenGL ES 2.0.
+        int[] attrib_list = {
+                EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
+                EGL14.EGL_NONE
+        };
+        mEglContext = EGL14.eglCreateContext(mEglDisplay, configs[0], EGL14.EGL_NO_CONTEXT,
+                attrib_list, 0);
+        AV_GLUtil.checkEglError("eglCreateContext");
+        if (mEglContext == null) {
+            throw new RuntimeException("null context");
+        }
+
+        // Create a window surface, and attach it to the Surface we received.
+        int[] surfaceAttribs = {
+                EGL14.EGL_NONE
+        };
+        mEglSurface = EGL14.eglCreateWindowSurface(mEglDisplay, configs[0], new Surface(mSurfaceTexture),
+                surfaceAttribs, 0);
+        AV_GLUtil.checkEglError("eglCreateWindowSurface");
+        if (mEglSurface == null) {
+            throw new RuntimeException("surface was null");
+        }
+    }
+
+    public void release() {
+        if (null != mSurfaceTexture)
+            mSurfaceTexture.release();
+    }
+
+    public void makeCurrent() {
+        if (!EGL14.eglMakeCurrent(mEglDisplay, mEglSurface, mEglSurface, mEglContext)) {
+            throw new RuntimeException("eglMakeCurrent failed");
+        }
+    }
+
+    public int createOESTexture() {
+        int[] textures = new int[1];
+        GLES20.glGenTextures(1, textures, 0);
+
+        int textureID = textures[0];
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureID);
+        AV_GLUtil.checkEglError("glBindTexture textureID");
+
+        GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER,
+                GLES20.GL_NEAREST);
+        GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER,
+                GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S,
+                GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T,
+                GLES20.GL_CLAMP_TO_EDGE);
+        AV_GLUtil.checkEglError("glTexParameter");
+
+        return textureID;
+    }
+
+    public void drawFrame(SurfaceTexture st, int textureID) {
+        st.updateTexImage();
+        if (null != mTextureRender)
+            mTextureRender.drawFrame(st, textureID);
+    }
+
+    public Bitmap readPixels(int width, int height) {
+        ByteBuffer PixelBuffer = ByteBuffer.allocateDirect(4 * width * height);
+        PixelBuffer.position(0);
+        GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, PixelBuffer);
+
+        Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        PixelBuffer.position(0);
+        bmp.copyPixelsFromBuffer(PixelBuffer);
+
+        return bmp;
+    }
+}
+
+class AV_GLUtil {
+    /**
+     * Checks for EGL errors.
+     */
+    public static void checkEglError(String msg) {
+        boolean failed = false;
+        int error;
+        while ((error = EGL14.eglGetError()) != EGL14.EGL_SUCCESS) {
+            Log.e("TAG", msg + ": EGL error: 0x" + Integer.toHexString(error));
+            failed = true;
+        }
+        if (failed) {
+            throw new RuntimeException("EGL error encountered (see log)");
+        }
+    }   
+}
+
+class AV_TextureRender {
+    private static final String TAG = "TextureRender";
+
+    private static final int FLOAT_SIZE_BYTES = 4;
+    private static final int TRIANGLE_VERTICES_DATA_STRIDE_BYTES = 5 * FLOAT_SIZE_BYTES;
+    private static final int TRIANGLE_VERTICES_DATA_POS_OFFSET = 0;
+    private static final int TRIANGLE_VERTICES_DATA_UV_OFFSET = 3;
+    private final float[] mTriangleVerticesData = {
+        // X, Y, Z, U, V
+        -1.0f, -1.0f, 0, 0.f, 1.f,
+         1.0f, -1.0f, 0, 1.f, 1.f,
+        -1.0f,  1.0f, 0, 0.f, 0.f,
+         1.0f,  1.0f, 0, 1.f, 0.f,
+    };
+
+    private FloatBuffer mTriangleVertices;
+
+    private static final String VERTEX_SHADER =
+            "uniform mat4 uMVPMatrix;\n" +
+            "uniform mat4 uSTMatrix;\n" +
+            "attribute vec4 aPosition;\n" +
+            "attribute vec4 aTextureCoord;\n" +
+            "varying vec2 vTextureCoord;\n" +
+            "void main() {\n" +
+            "  gl_Position = uMVPMatrix * aPosition;\n" +
+            "  vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
+            "}\n";
+
+    private static final String FRAGMENT_SHADER =
+            "#extension GL_OES_EGL_image_external : require\n" +
+            "precision mediump float;\n" +      // highp here doesn't seem to matter
+            "varying vec2 vTextureCoord;\n" +
+            "uniform samplerExternalOES sTexture;\n" +
+            "void main() {\n" +
+            "  vec2 texcoord = vTextureCoord;\n" +
+            "  vec3 normalColor = texture2D(sTexture, texcoord).rgb;\n" +
+            "  normalColor = vec3(normalColor.r, normalColor.g, normalColor.b);\n" + 
+            "  gl_FragColor = vec4(normalColor.r, normalColor.g, normalColor.b, 1); \n"+ 
+            "}\n";
+
+    private float[] mMVPMatrix = new float[16];
+    private float[] mSTMatrix = new float[16];
+
+    private int mProgram;
+    private int muMVPMatrixHandle;
+    private int muSTMatrixHandle;
+    private int maPositionHandle;
+    private int maTextureHandle;
+
+    public AV_TextureRender() {
+        mTriangleVertices = ByteBuffer.allocateDirect(
+            mTriangleVerticesData.length * FLOAT_SIZE_BYTES)
+                .order(ByteOrder.nativeOrder()).asFloatBuffer();
+        mTriangleVertices.put(mTriangleVerticesData).position(0);
+
+        Matrix.setIdentityM(mSTMatrix, 0);
+        init();
+    }
+
+    public void drawFrame(SurfaceTexture st, int textureID) {
+        AV_GLUtil.checkEglError("onDrawFrame start");
+        st.getTransformMatrix(mSTMatrix);
+
+        GLES20.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+        GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT | GLES20.GL_COLOR_BUFFER_BIT);
+
+        if (GLES20.glIsProgram( mProgram ) != true){
+            reCreateProgram();
+        }
+
+        GLES20.glUseProgram(mProgram);
+        AV_GLUtil.checkEglError("glUseProgram");
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureID);
+
+        mTriangleVertices.position(TRIANGLE_VERTICES_DATA_POS_OFFSET);
+        GLES20.glVertexAttribPointer(maPositionHandle, 3, GLES20.GL_FLOAT, false,
+            TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
+        AV_GLUtil.checkEglError("glVertexAttribPointer maPosition");
+        GLES20.glEnableVertexAttribArray(maPositionHandle);
+        AV_GLUtil.checkEglError("glEnableVertexAttribArray maPositionHandle");
+
+        mTriangleVertices.position(TRIANGLE_VERTICES_DATA_UV_OFFSET);
+        GLES20.glVertexAttribPointer(maTextureHandle, 3, GLES20.GL_FLOAT, false,
+            TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
+        AV_GLUtil.checkEglError("glVertexAttribPointer maTextureHandle");
+        GLES20.glEnableVertexAttribArray(maTextureHandle);
+        AV_GLUtil.checkEglError("glEnableVertexAttribArray maTextureHandle");
+
+        Matrix.setIdentityM(mMVPMatrix, 0);
+        GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
+        GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        AV_GLUtil.checkEglError("glDrawArrays");
+        GLES20.glFinish();
+    }
+
+    /**
+     * Initializes GL state.  Call this after the EGL surface has been created and made current.
+     */
+    public void init() {
+        mProgram = createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
+        if (mProgram == 0) {
+            throw new RuntimeException("failed creating program");
+        }
+        maPositionHandle = GLES20.glGetAttribLocation(mProgram, "aPosition");
+        AV_GLUtil.checkEglError("glGetAttribLocation aPosition");
+        if (maPositionHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for aPosition");
+        }
+        maTextureHandle = GLES20.glGetAttribLocation(mProgram, "aTextureCoord");
+        AV_GLUtil.checkEglError("glGetAttribLocation aTextureCoord");
+        if (maTextureHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for aTextureCoord");
+        }
+
+        muMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
+        AV_GLUtil.checkEglError("glGetUniformLocation uMVPMatrix");
+        if (muMVPMatrixHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for uMVPMatrix");
+        }
+
+        muSTMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uSTMatrix");
+        AV_GLUtil.checkEglError("glGetUniformLocation uSTMatrix");
+        if (muSTMatrixHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for uSTMatrix");
+        }
+    }
+
+    private void reCreateProgram() {
+        mProgram = createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
+        if (mProgram == 0) {
+            throw new RuntimeException("failed creating program");
+        }
+        maPositionHandle = GLES20.glGetAttribLocation(mProgram, "aPosition");
+        AV_GLUtil.checkEglError("glGetAttribLocation aPosition");
+        if (maPositionHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for aPosition");
+        }
+        maTextureHandle = GLES20.glGetAttribLocation(mProgram, "aTextureCoord");
+        AV_GLUtil.checkEglError("glGetAttribLocation aTextureCoord");
+        if (maTextureHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for aTextureCoord");
+        }
+
+        muMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
+        AV_GLUtil.checkEglError("glGetUniformLocation uMVPMatrix");
+        if (muMVPMatrixHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for uMVPMatrix");
+        }
+
+        muSTMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uSTMatrix");
+        AV_GLUtil.checkEglError("glGetUniformLocation uSTMatrix");
+        if (muSTMatrixHandle == -1) {
+            throw new RuntimeException("Could not get attrib location for uSTMatrix");
+        }
+    }
+
+    private int loadShader(int shaderType, String source) {
+        int shader = GLES20.glCreateShader(shaderType);
+        AV_GLUtil.checkEglError("glCreateShader type=" + shaderType);
+        GLES20.glShaderSource(shader, source);
+        GLES20.glCompileShader(shader);
+        int[] compiled = new int[1];
+        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0);
+        if (compiled[0] == 0) {
+            Log.e(TAG, "Could not compile shader " + shaderType + ":");
+            Log.e(TAG, " " + GLES20.glGetShaderInfoLog(shader));
+            GLES20.glDeleteShader(shader);
+            shader = 0;
+        }
+        return shader;
+    }
+
+    private int createProgram(String vertexSource, String fragmentSource) {
+        int vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexSource);
+        if (vertexShader == 0) {
+            return 0;
+        }
+        int pixelShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource);
+        if (pixelShader == 0) {
+            return 0;
+        }
+
+        int program = GLES20.glCreateProgram();
+        AV_GLUtil.checkEglError("glCreateProgram");
+        if (program == 0) {
+            Log.e(TAG, "Could not create program");
+        }
+        GLES20.glAttachShader(program, vertexShader);
+        AV_GLUtil.checkEglError("glAttachShader");
+        GLES20.glAttachShader(program, pixelShader);
+        AV_GLUtil.checkEglError("glAttachShader");
+        GLES20.glLinkProgram(program);
+        int[] linkStatus = new int[1];
+        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0);
+        if (linkStatus[0] != GLES20.GL_TRUE) {
+            Log.e(TAG, "Could not link program: ");
+            Log.e(TAG, GLES20.glGetProgramInfoLog(program));
+            GLES20.glDeleteProgram(program);
+            program = 0;
+        }
+        return program;
+    }
+}
 
 class AV_FrameCapture {
     final static String TAG = "AV_FrameCapture";
