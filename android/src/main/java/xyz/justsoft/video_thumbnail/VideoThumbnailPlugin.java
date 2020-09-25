@@ -866,7 +866,7 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
         new Handler(Looper.getMainLooper()).post(runnable);
     }
     
-    private static final mFrameCapture = new AV_FrameCapture();
+    private static final AV_FrameCapture mFrameCapture = new AV_FrameCapture();
     public static Bitmap getFrameAtTimeByFrameCapture(String path, long time, int snapshot_width, int snapshot_height) {
         mFrameCapture.setDataSource(path);
         mFrameCapture.setTargetSize(snapshot_width, snapshot_height);
