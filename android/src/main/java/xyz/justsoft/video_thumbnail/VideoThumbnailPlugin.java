@@ -33,7 +33,7 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
-public class AV_BitmapUtil {
+class AV_BitmapUtil {
     public static void saveBitmap(Bitmap bmp, String path) {
         try {
             FileOutputStream fos = new FileOutputStream(path);
