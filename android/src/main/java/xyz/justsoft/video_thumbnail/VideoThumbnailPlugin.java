@@ -706,7 +706,7 @@ class AV_BitmapUtil {
     }
 
     public static Bitmap flip(Bitmap src) {
-        Matrix matrix = new Matrix();
+        android.graphics.Matrix matrix = new android.graphics.Matrix();
         matrix.preScale(1.0f, -1.0f);
         return Bitmap.createBitmap(src, 0, 0, src.getWidth(), src.getHeight(), matrix, true);
     }
