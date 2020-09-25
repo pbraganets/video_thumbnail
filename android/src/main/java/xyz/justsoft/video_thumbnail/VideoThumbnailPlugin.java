@@ -13,6 +13,8 @@ import java.nio.ByteBuffer;
 import android.os.HandlerThread;
 import android.graphics.SurfaceTexture;
 
+import android.opengl.*;
+
 import android.content.ContentResolver;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
