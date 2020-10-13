@@ -726,7 +726,7 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
      * Plugin registration.
      */
     public static void registerWith(Registrar registrar) {
-        mFrameCapture.setTargetSize(224, 229);
+        mFrameCapture.setTargetSize(224, 299);
         mFrameCapture.init();
         final MethodChannel channel = new MethodChannel(registrar.messenger(), "video_thumbnail");
         channel.setMethodCallHandler(new VideoThumbnailPlugin());
