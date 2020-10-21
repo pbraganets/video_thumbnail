@@ -127,6 +127,8 @@ class AV_GLHelper {
     public void release() {
         if (null != mSurfaceTexture)
             mSurfaceTexture.release();
+        if (null != mTextureRender)
+            mTextureRender.release();
     }
 
     public void makeCurrent() {
@@ -290,7 +292,11 @@ class AV_TextureRender {
         AV_GLUtil.checkEglError("glDrawArrays");
         GLES20.glFinish();
     }
-
+    
+    public void release() {
+        mTriangleVertices = null;
+        System.gc();
+    }
     /**
      * Initializes GL state.  Call this after the EGL surface has been created and made current.
      */
