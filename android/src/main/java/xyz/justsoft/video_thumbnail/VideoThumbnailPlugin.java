@@ -60,6 +60,7 @@ class AV_GLHelper {
     private EGLDisplay mEglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLContext mEglContext = EGL14.EGL_NO_CONTEXT;
     private EGLSurface mEglSurface = EGL14.EGL_NO_SURFACE;
+    private Surface mSurface = null;
 
     public void init(SurfaceTexture st) {
         mSurfaceTexture = st;
@@ -116,7 +117,8 @@ class AV_GLHelper {
         int[] surfaceAttribs = {
                 EGL14.EGL_NONE
         };
-        mEglSurface = EGL14.eglCreateWindowSurface(mEglDisplay, configs[0], new Surface(mSurfaceTexture),
+        mSurface = new Surface(mSurfaceTexture);
+        mEglSurface = EGL14.eglCreateWindowSurface(mEglDisplay, configs[0], mSurface,
                 surfaceAttribs, 0);
         AV_GLUtil.checkEglError("eglCreateWindowSurface");
         if (mEglSurface == null) {
@@ -125,8 +127,23 @@ class AV_GLHelper {
     }
 
     public void release() {
+        EGL14.eglDestroySurface(mEglDisplay, mEglSurface);
+        EGL14.eglDestroyContext(mEglDisplay, mEglContext);
+        EGL14.eglReleaseThread();
+        EGL14.eglTerminate(mEglDisplay);
+        
+        mSurface.release();
+  
+        mSurface = null;
+        mEglDisplay = null;
+        mEglContext = null;
+        mEglSurface = null;
+        
         if (null != mSurfaceTexture)
             mSurfaceTexture.release();
+            mSurfaceTexture = null;
+        if (null != mTextureRender)
+            mTextureRender.release();
     }
 
     public void makeCurrent() {
@@ -290,7 +307,11 @@ class AV_TextureRender {
         AV_GLUtil.checkEglError("glDrawArrays");
         GLES20.glFinish();
     }
-
+    
+    public void release() {
+        mTriangleVertices = null;
+        System.gc();
+    }
     /**
      * Initializes GL state.  Call this after the EGL surface has been created and made current.
      */
@@ -718,7 +739,7 @@ class AV_BitmapUtil {
 public class VideoThumbnailPlugin implements MethodCallHandler {
     private static String TAG = "ThumbnailPlugin";
     private static final int HIGH_QUALITY_MIN_VAL = 70;
-    private static final AV_FrameCapture mFrameCapture = new AV_FrameCapture();
+    private AV_FrameCapture mFrameCapture = null;
 
     private ExecutorService executor = Executors.newCachedThreadPool();
 
@@ -726,8 +747,6 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
      * Plugin registration.
      */
     public static void registerWith(Registrar registrar) {
-        mFrameCapture.setTargetSize(224, 336);
-        mFrameCapture.init();
         final MethodChannel channel = new MethodChannel(registrar.messenger(), "video_thumbnail");
         channel.setMethodCallHandler(new VideoThumbnailPlugin());
     }
@@ -869,9 +888,16 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
         new Handler(Looper.getMainLooper()).post(runnable);
     }
     
-    public static Bitmap getFrameAtTimeByFrameCapture(String path, long time, int snapshot_width, int snapshot_height) {
+    private Bitmap getFrameAtTimeByFrameCapture(String path, long time, int snapshot_width, int snapshot_height) {
+        mFrameCapture = new AV_FrameCapture();
+        mFrameCapture.setTargetSize(snapshot_width, snapshot_height);
+        mFrameCapture.init();
         mFrameCapture.setDataSource(path);
-        return mFrameCapture.getFrameAtTime(time);
+        Bitmap result = mFrameCapture.getFrameAtTime(time);
+        if (mFrameCapture != null) {
+            mFrameCapture.release();
+        }
+        return result;
     }
 
     /**
@@ -882,7 +908,7 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
      * @param targetH the max height of the thumbnail
      * @param targetW the max width of the thumbnail
      */
-    public static Bitmap createVideoThumbnail(final String video, int targetH, int targetW, int timeMs) {
+    private Bitmap createVideoThumbnail(final String video, int targetH, int targetW, int timeMs) {
         Bitmap bitmap = null;
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
