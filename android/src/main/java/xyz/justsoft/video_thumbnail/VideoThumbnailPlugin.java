@@ -60,6 +60,7 @@ class AV_GLHelper {
     private EGLDisplay mEglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLContext mEglContext = EGL14.EGL_NO_CONTEXT;
     private EGLSurface mEglSurface = EGL14.EGL_NO_SURFACE;
+    private Surface mSurface = null;
 
     public void init(SurfaceTexture st) {
         mSurfaceTexture = st;
@@ -116,7 +117,8 @@ class AV_GLHelper {
         int[] surfaceAttribs = {
                 EGL14.EGL_NONE
         };
-        mEglSurface = EGL14.eglCreateWindowSurface(mEglDisplay, configs[0], new Surface(mSurfaceTexture),
+        mSurface = new Surface(mSurfaceTexture);
+        mEglSurface = EGL14.eglCreateWindowSurface(mEglDisplay, configs[0], mSurface,
                 surfaceAttribs, 0);
         AV_GLUtil.checkEglError("eglCreateWindowSurface");
         if (mEglSurface == null) {
@@ -129,7 +131,10 @@ class AV_GLHelper {
         EGL14.eglDestroyContext(mEglDisplay, mEglContext);
         EGL14.eglReleaseThread();
         EGL14.eglTerminate(mEglDisplay);
+        
+        mSurface.release();
   
+        mSurface = null;
         mEglDisplay = null;
         mEglContext = null;
         mEglSurface = null;
