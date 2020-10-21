@@ -63,7 +63,7 @@ class AV_GLHelper {
 
     public void init(SurfaceTexture st) {
         mSurfaceTexture = st;
-        //initGL();
+        initGL();
 
         makeCurrent();
         mTextureRender = new AV_TextureRender();
