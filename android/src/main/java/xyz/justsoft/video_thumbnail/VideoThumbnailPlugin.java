@@ -887,7 +887,7 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
      * @param targetH the max height of the thumbnail
      * @param targetW the max width of the thumbnail
      */
-    public static Bitmap createVideoThumbnail(final String video, int targetH, int targetW, int timeMs) {
+    private Bitmap createVideoThumbnail(final String video, int targetH, int targetW, int timeMs) {
         Bitmap bitmap = null;
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
