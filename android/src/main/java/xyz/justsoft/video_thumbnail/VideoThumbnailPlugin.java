@@ -718,7 +718,7 @@ class AV_BitmapUtil {
 public class VideoThumbnailPlugin implements MethodCallHandler {
     private static String TAG = "ThumbnailPlugin";
     private static final int HIGH_QUALITY_MIN_VAL = 70;
-    private static final AV_FrameCapture mFrameCapture = new AV_FrameCapture();
+    private AV_FrameCapture mFrameCapture = null;
 
     private ExecutorService executor = Executors.newCachedThreadPool();
 
@@ -726,8 +726,6 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
      * Plugin registration.
      */
     public static void registerWith(Registrar registrar) {
-        mFrameCapture.setTargetSize(224, 336);
-        mFrameCapture.init();
         final MethodChannel channel = new MethodChannel(registrar.messenger(), "video_thumbnail");
         channel.setMethodCallHandler(new VideoThumbnailPlugin());
     }
@@ -870,8 +868,15 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
     }
     
     public static Bitmap getFrameAtTimeByFrameCapture(String path, long time, int snapshot_width, int snapshot_height) {
+        mFrameCapture = new AV_FrameCapture();
+        mFrameCapture.setTargetSize(snapshot_width, snapshot_height);
+        mFrameCapture.init();
         mFrameCapture.setDataSource(path);
-        return mFrameCapture.getFrameAtTime(time);
+        Bitmap result = mFrameCapture.getFrameAtTime(time);
+        if (mFrameCapture != null) {
+            mFrameCapture.release();
+        }
+        return result;
     }
 
     /**
