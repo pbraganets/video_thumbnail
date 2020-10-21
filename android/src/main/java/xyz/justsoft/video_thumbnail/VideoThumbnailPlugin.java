@@ -125,13 +125,12 @@ class AV_GLHelper {
     }
 
     public void release() {
-        EGL14.eglDestroySurface(mEGLDisplay, mEglSurface);
-        EGL14.eglDestroyContext(mEGLDisplay, mEglContext);
+        EGL14.eglDestroySurface(mEglDisplay, mEglSurface);
+        EGL14.eglDestroyContext(mEglDisplay, mEglContext);
         EGL14.eglReleaseThread();
         EGL14.eglTerminate(mEglDisplay);
-        mEglSurface.release();
   
-        mEGLDisplay = null;
+        mEglDisplay = null;
         mEglContext = null;
         mEglSurface = null;
         
